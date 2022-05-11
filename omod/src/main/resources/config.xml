@@ -17,6 +17,8 @@
     <!-- <updateURL>https://modules.openmrs.org/modules/download/@MODULE_ID@/update.rdf</updateURL> -->
     <!-- /Base Module Properties -->
 
+    <require_version>${openmrsPlatformVersion}</require_version>
+
     <require_modules>
         <require_module version="${appframeworkVersion}">
             org.openmrs.module.appframework
@@ -36,11 +38,25 @@
         <require_module>
             org.openmrs.module.ugandaemrreports
         </require_module>
+        <require_module>
+            org.openmrs.module.metadatadeploy
+        </require_module>
+        <require_module>
+            org.openmrs.module.metadatasharing
+        </require_module>
+
+        <require_module>
+            org.openmrs.module.fhir2
+        </require_module>
     </require_modules>
 
     <aware_of_modules>
         <aware_of_module>org.openmrs.module.legacyui</aware_of_module>
     </aware_of_modules>
+
+    <require_module version="${webservices.restModuleVersion}">
+        org.openmrs.module.webservices
+    </require_module>
 
 
     <!-- AOP
@@ -70,6 +86,49 @@
         <defaultValue></defaultValue>
         <description>This is the recency password that the system will connect to</description>
     </globalProperty>
+
+    <globalProperty>
+        <property>ugandaemrsync.analytics.server.url</property>
+        <defaultValue>https://ugisl.mets.or.ug/emr-analytics</defaultValue>
+        <description> </description>
+    </globalProperty>
+    <globalProperty>
+        <property>ugandaemrsync.analytics.server.username</property>
+        <defaultValue></defaultValue>
+        <description>This is the analytics username that the system will connect to</description>
+    </globalProperty>
+    <globalProperty>
+        <property>ugandaemrsync.analytics.server.password</property>
+        <defaultValue></defaultValue>
+        <description>This is the analytics password that the system will connect to</description>
+    </globalProperty>
+
+<!--    Sending to DHIS2 Server global Properties-->
+    <globalProperty>
+        <property>ugandaemrsync.sendtoDHIS2.server.url</property>
+        <defaultValue>https://ugisl.mets.or.ug/ehmis</defaultValue>
+        <description> </description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>ugandaemrsync.sendtoDHIS2.server.username</property>
+        <defaultValue></defaultValue>
+        <description>This is the facility DHIS2 password that the system will connect to</description>
+    </globalProperty>
+
+    <globalProperty>
+        <property>ugandaemrsync.sendtoDHIS2.server.password</property>
+        <defaultValue></defaultValue>
+        <description>This is the facility DHIS2 password that the system will connect to</description>
+    </globalProperty>
+
+
+
+    <globalProperty>
+        <property>ugandaemrsync.analytics.last.successful.submission.date</property>
+        <defaultValue></defaultValue>
+        <description>The last successful submission date for analytics send data task scheduler</description>
+    </globalProperty>
     <globalProperty>
         <property>ugandaemrsync.serverIP</property>
         <defaultValue></defaultValue>
@@ -94,6 +153,20 @@
         <property>ugandaemrsync.recency.submit.data.once.daily</property>
         <defaultValue>true</defaultValue>
         <description>Turns on and off the submission of recency data once daily or multiple time in specified interval</description>
+    </globalProperty> <globalProperty>
+        <property>ugandaemrsync.ARTAccess.last.successful.submission.date</property>
+        <defaultValue></defaultValue>
+        <description>ARTAccess last successful submission date</description>
+    </globalProperty>
+    <globalProperty>
+        <property>ugandaemrsync.sendNextGenReports.server.url</property>
+        <defaultValue>https://ugisl.mets.or.ug/Measure/mer-tx-indicators</defaultValue>
+        <description> </description>
+    </globalProperty>
+    <globalProperty>
+        <property>ugandaemrsync.sendNextGenReports.server.reportuuids</property>
+        <defaultValue>214fb8ef-6219-43f3-b20b-023261c0dec6,8dafdc32-97b7-4f49-828e-475cd4f09669,65fec0844-1970-43c5-bf77-b296415daa34</defaultValue>
+        <description> </description>
     </globalProperty>
 
     <!--
@@ -123,7 +196,28 @@
     -->
     <!-- /Servlets -->
 
+    <globalProperty>
+        <property>ugandaemrsync.server.username</property>
+        <defaultValue></defaultValue>
+        <description>
+            This is the username for server that the system would like to connect to
+        </description>
+    </globalProperty>
+    <globalProperty>
+        <property>ugandaemrsync.server.password</property>
+        <defaultValue></defaultValue>
+        <description>
+            This is the password for server that the system would like to connect to
+        </description>
+    </globalProperty>
 
+    <globalProperty>
+        <property>ugandaemrsync.syncCBSFHIRData</property>
+        <defaultValue>false</defaultValue>
+        <description>
+           When Enabled to true CBS FHIR Data will be synced to the central fhir server
+        </description>
+    </globalProperty>
     <!-- Internationalization -->
     <!-- All message codes should start with @MODULE_ID@.* -->
     <messages>
@@ -139,6 +233,5 @@
         <file>messages_es.properties</file>
     </messages>
     <!-- /Internationalization -->
-
 </module>
 

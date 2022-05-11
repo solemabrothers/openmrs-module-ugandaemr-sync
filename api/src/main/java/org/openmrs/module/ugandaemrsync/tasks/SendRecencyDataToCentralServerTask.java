@@ -1,5 +1,6 @@
 package org.openmrs.module.ugandaemrsync.tasks;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.HttpStatus;
 import org.openmrs.api.context.Context;
@@ -15,7 +16,7 @@ import org.openmrs.module.reporting.report.util.ReportUtil;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.openmrs.module.ugandaemrsync.server.SyncGlobalProperties;
-import org.openmrs.module.ugandaemrsync.server.UgandaEMRHttpURLConnection;
+import org.openmrs.module.ugandaemrsync.api.UgandaEMRHttpURLConnection;
 import org.openmrs.scheduler.tasks.AbstractTask;
 import org.openmrs.util.OpenmrsUtil;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -29,10 +30,17 @@ import java.io.DataInputStream;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.util.Calendar;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 import static org.apache.commons.lang.StringUtils.isBlank;
 import static org.openmrs.module.ugandaemrsync.UgandaEMRSyncConfig.*;
@@ -84,7 +92,8 @@ public class SendRecencyDataToCentralServerTask extends AbstractTask {
 			}
 			catch (ParseException e) {
 				log.info("Error parsing last successful submission date " + strSubmissionDate + e);
-				e.printStackTrace();
+				log.error(e);
+				return;
 			}
 			if (dateFormat.format(gpSubmissionDate).equals(dateFormat.format(todayDate))
 			        && strSubmitOnceDaily.equals("true")) {
@@ -114,16 +123,15 @@ public class SendRecencyDataToCentralServerTask extends AbstractTask {
 		} else {
 			log.info("Http response status code: " + httpResponse.getStatusLine().getStatusCode() + ". Reason: "
 			        + httpResponse.getStatusLine().getReasonPhrase());
-			ugandaEMRHttpURLConnection.setAlertForAllUsers("Http request has returned a response status: "
-			        + httpResponse.getStatusLine().getStatusCode() + " " + httpResponse.getStatusLine().getReasonPhrase()
-			        + " error");
 		}
 	}
 	
 	private String getRecencyDataExport() {
 		ReportDefinitionService reportDefinitionService = Context.getService(ReportDefinitionService.class);
 		String strOutput = new String();
-		
+
+		LocalDate todayDate = LocalDate.now();
+
 		try {
 			ReportDefinition rd = reportDefinitionService.getDefinitionByUuid(RECENCY_DATA_EXPORT_REPORT_DEFINITION_UUID);
 			if (rd == null) {
@@ -135,61 +143,46 @@ public class SendRecencyDataToCentralServerTask extends AbstractTask {
 			if (!renderingMode.getRenderer().canRender(rd)) {
 				throw new IllegalArgumentException("Unable to render Recency Data Export with " + reportRendergingMode);
 			}
-			
+
+			// compute the end date for the report
+			long reportDuration = Long.parseLong(syncGlobalProperties.getGlobalProperty(GP_RECENCY_REPORT_DURATION));
+
+			LocalDate startDate = todayDate.minusMonths(reportDuration);
+			log.info("Generating Recency data export with start date " + startDate + " and end date "
+					+ todayDate + "with a report duration of " + reportDuration + " months");
+
+			Map<String, Object> parameterValues = new HashMap<String, Object>();
+			parameterValues.put("startDate", Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()));
+			parameterValues.put("endDate", Date.from(todayDate.atStartOfDay(ZoneId.systemDefault()).toInstant()));
 			EvaluationContext context = new EvaluationContext();
+			context.setParameterValues(parameterValues);
 			ReportData reportData = reportDefinitionService.evaluate(rd, context);
 			ReportRequest reportRequest = new ReportRequest();
 			reportRequest.setReportDefinition(new Mapped<ReportDefinition>(rd, context.getParameterValues()));
 			reportRequest.setRenderingMode(renderingMode);
 			File file = new File(OpenmrsUtil.getApplicationDataDirectory() + RECENCY_CSV_FILE_NAME);
 			FileOutputStream fileOutputStream = new FileOutputStream(file);
+
+			// render the report and write the contents to a file
 			renderingMode.getRenderer().render(reportData, renderingMode.getArgument(), fileOutputStream);
-			
-			strOutput = this.readOutputFile(strOutput);
+
+			return FileUtils.readFileToString(file, StandardCharsets.UTF_8.toString());
+		}
+		catch(NumberFormatException nfe) {
+			log.error("The global property ugandaemr.hts.recency.surveillance_report_coverage_months parameter is not a valid integer with the value "
+					+ syncGlobalProperties.getGlobalProperty(GP_RECENCY_REPORT_DURATION));
 		}
 		catch (Exception e) {
-			log.info("Error rendering the contents of the Recency data export report to"
+			log.error("Error rendering the contents of the Recency data export report to"
 			        + OpenmrsUtil.getApplicationDataDirectory() + RECENCY_CSV_FILE_NAME + e.toString());
 		}
-		
-		return strOutput;
-	}
-	
-	/*
-	Method: readOutputFile
-	Pre condition: empty strOutput initialized
-	Description:
-		Read the recency exported report file in csv
-		Create a string and prefix the dhis2_orgunit_uuid
-		and encounter_uuid columns to the final output
-	Post condition: strOutput assigned with csv file data prefixed with two additional columns
-	* */
-	
-	public String readOutputFile(String strOutput) throws Exception {
-		SyncGlobalProperties syncGlobalProperties = new SyncGlobalProperties();
-		FileInputStream fstreamItem = new FileInputStream(OpenmrsUtil.getApplicationDataDirectory() + RECENCY_CSV_FILE_NAME);
-		DataInputStream inItem = new DataInputStream(fstreamItem);
-		BufferedReader brItem = new BufferedReader(new InputStreamReader(inItem));
-		String phraseItem;
-		
-		if (!(phraseItem = brItem.readLine()).isEmpty()) {
-			strOutput = strOutput + "\"dhis2_orgunit_uuid\"," + "\"encounter_uuid\"," + phraseItem + System.lineSeparator();
-			while ((phraseItem = brItem.readLine()) != null) {
-				strOutput = strOutput + "\"" + syncGlobalProperties.getGlobalProperty(GP_DHIS2_ORGANIZATION_UUID)
-				        + "\",\"\"," + phraseItem + System.lineSeparator();
-			}
-		}
-		
-		fstreamItem.close();
-		
+
 		return strOutput;
 	}
 	
 	public boolean isGpRecencyServerUrlSet() {
 		if (isBlank(syncGlobalProperties.getGlobalProperty(GP_RECENCY_SERVER_URL))) {
 			log.info("Recency server URL is not set");
-			ugandaEMRHttpURLConnection
-			        .setAlertForAllUsers("Recency server URL is not set please go to admin then Settings then Ugandaemrsync and set it");
 			return false;
 		}
 		return true;
@@ -198,8 +191,6 @@ public class SendRecencyDataToCentralServerTask extends AbstractTask {
 	public boolean isGpDhis2OrganizationUuidSet() {
 		if (isBlank(syncGlobalProperties.getGlobalProperty(GP_DHIS2_ORGANIZATION_UUID))) {
 			log.info("DHIS2 Organization UUID is not set");
-			ugandaEMRHttpURLConnection
-			        .setAlertForAllUsers("DHIS2 Organization UUID is not set please go to admin then Settings then Ugandaemr and set it");
 			return false;
 		}
 		return true;
@@ -208,8 +199,6 @@ public class SendRecencyDataToCentralServerTask extends AbstractTask {
 	public boolean isGpRecencyServerPasswordSet() {
 		if (isBlank(syncGlobalProperties.getGlobalProperty(GP_RECENCY_SERVER_PASSWORD))) {
 			log.info("Recency server URL is not set");
-			ugandaEMRHttpURLConnection
-			        .setAlertForAllUsers("Recency server password is not set please go to admin then Settings then Ugandaemrsync and set it");
 			return false;
 		}
 		return true;
